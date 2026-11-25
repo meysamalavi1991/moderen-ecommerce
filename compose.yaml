@@ -1,0 +1,130 @@
+name: modern-ecommerce
+
+services:
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: modern-ecommerce-frontend
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./frontend:/app # bind mount
+      - frontend_node_modules:/app/node_modules # named volume
+    networks:
+      - frontend_network
+
+  # WordPress + PHP-FPM
+  wordpress:
+    build:
+      context: .
+      dockerfile: docker/wordpress/Dockerfile
+    container_name: modern-ecommerce-wordpress
+    restart: unless-stopped
+    environment:
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: ${DB_DATABASE}
+      WORDPRESS_DB_USER: ${DB_USERNAME}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+
+      WORDPRESS_AUTH_KEY: ${WORDPRESS_AUTH_KEY}
+      WORDPRESS_SECURE_AUTH_KEY: ${WORDPRESS_SECURE_AUTH_KEY}
+      WORDPRESS_LOGGED_IN_KEY: ${WORDPRESS_LOGGED_IN_KEY}
+      WORDPRESS_NONCE_KEY: ${WORDPRESS_NONCE_KEY}
+      WORDPRESS_AUTH_SALT: ${WORDPRESS_AUTH_SALT}
+      WORDPRESS_SECURE_AUTH_SALT: ${WORDPRESS_SECURE_AUTH_SALT}
+      WORDPRESS_LOGGED_IN_SALT: ${WORDPRESS_LOGGED_IN_SALT}
+      WORDPRESS_NONCE_SALT: ${WORDPRESS_NONCE_SALT}
+
+    volumes:
+      - wordpress_core:/var/www/html # named volume
+      - ./wordpress/wp-content:/var/www/html/wp-content # bind mount
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+    networks:
+      - frontend_network
+      - backend_network
+
+  # MariaDB
+  mariadb:
+    image: public.ecr.aws/docker/library/mariadb:11.8
+    container_name: modern-ecommerce-mariadb
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+    healthcheck:
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    networks:
+      - backend_network
+
+  # Nginx Reverse Proxy
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    container_name: modern-ecommerce-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - wordpress_core:/var/www/html:ro
+      - ./wordpress/wp-content:/var/www/html/wp-content:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+    depends_on:
+      - frontend
+      - wordpress
+
+    networks:
+      - frontend_network
+
+  # phpMyAdmin - Development only
+  phpmyadmin:
+    image: public.ecr.aws/docker/library/phpmyadmin:latest
+    container_name: modern-ecommerce-phpmyadmin
+    restart: unless-stopped
+    profiles:
+      - dev
+    ports:
+      - "0.0.0.0:${PMA_PORT}:80"
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - backend_network
+
+volumes:
+  mariadb_data:
+  wordpress_core:
+  frontend_node_modules:
+
+networks:
+  frontend_network:
+    driver: bridge
+
+  backend_network:
+    driver: bridge
+    internal: true

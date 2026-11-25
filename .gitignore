@@ -1,0 +1,35 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# WordPress
+wordpress/wp-content/uploads/*
+!wordpress/wp-content/uploads/.gitkeep
+
+wordpress/wp-content/plugins/*
+!wordpress/wp-content/plugins/modern-ecommerce-api/
+
+wordpress/wp-content/themes/*
+!wordpress/wp-content/themes/.gitkeep
+
+# Dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Build and cache
+*.log
+.cache/
+tmp/
+temp/
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Backup
+*.sql
+*.sql.gz
+*.bak
